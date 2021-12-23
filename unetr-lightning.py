@@ -288,21 +288,20 @@ class Net(pytorch_lightning.LightningModule):
         labels = [self.post_label(i) for i in decollate_batch(labels)]
         # ! <<< Offline Predict
         img_number = pathlib.Path(batch['image_meta_dict']['filename_or_obj'][0]).parent.name
-        save_folder = root_dir + img_number + '/' + batch_idx + '/'
+        save_folder = root_dir + str(batch_idx) + '/' + img_number + '/'
+        
         save_folder_path = pathlib.Path(save_folder)
-        save_folder_path.mkdir(exist_ok=True)
+        save_folder_path.mkdir(parents=True, exist_ok=True)
 
         _, max_output = outputs[0].detach().cpu().max(axis=0, keepdim=False)
         max_output =  max_output.numpy()
-        output_name =  save_folder + '_predict.nii.gz'
+        output_name =  save_folder + img_number + '_predict.nii.gz'
         write_nifti(max_output, output_name)
 
         _, max_label = labels[0].detach().cpu().max(axis=0, keepdim=False)
         max_label = max_label.numpy()
-        label_name = save_folder + '_label.nii.gz'
+        label_name = save_folder + img_number + '_label.nii.gz'
         write_nifti(max_label, label_name)
-
-        sys.exit()
         # ! >>>
         self.dice_metric(y_pred=outputs, y=labels)
         return {"val_loss": loss, "val_number": len(outputs)}
@@ -343,21 +342,21 @@ checkpoint_callback = ModelCheckpoint(
 
 # initialise Lightning's trainer.
 # ! <<<
-# trainer = pytorch_lightning.Trainer(
-#     gpus=[0],
-#     max_epochs=net.max_epochs,
-#     check_val_every_n_epoch=net.check_val,
-#     callbacks=checkpoint_callback,
-#     default_root_dir=root_dir,
-# )
 trainer = pytorch_lightning.Trainer(
     gpus=[0],
-    limit_train_batches=1,
-    max_epochs=2000,
-    check_val_every_n_epoch=1,
+    max_epochs=net.max_epochs,
+    check_val_every_n_epoch=net.check_val,
     callbacks=checkpoint_callback,
     default_root_dir=root_dir,
 )
+# trainer = pytorch_lightning.Trainer(
+#     gpus=[0],
+#     limit_train_batches=1,
+#     max_epochs=2000,
+#     check_val_every_n_epoch=1,
+#     callbacks=checkpoint_callback,
+#     default_root_dir=root_dir,
+# )
 # ! >>>
 
 # train
