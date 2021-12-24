@@ -106,8 +106,12 @@ class Net(pytorch_lightning.LightningModule):
         )
         self.best_val_dice = 0
         self.best_val_epoch = 0
-        self.max_epochs = 1300
-        self.check_val = 30
+        # ! <<<
+        # self.max_epochs = 1300
+        # self.check_val = 30
+        self.max_epochs = 100
+        self.check_val = 5
+        # ! >>>
         self.warmup_epochs = 20
         self.metric_values = []
         self.epoch_loss_values = []
@@ -287,8 +291,8 @@ class Net(pytorch_lightning.LightningModule):
         outputs = [self.post_pred(i) for i in decollate_batch(outputs)]
         labels = [self.post_label(i) for i in decollate_batch(labels)]
         # ! <<< Offline Predict
-        img_number = pathlib.Path(batch['image_meta_dict']['filename_or_obj'][0]).parent.name
-        save_folder = root_dir + str(batch_idx) + '/' + img_number + '/'
+        img_number = pathlib.Path(batch['label_meta_dict']['filename_or_obj'][0]).parent.name
+        save_folder = root_dir + str(self.current_epoch) + '/' + img_number + '/'
         
         save_folder_path = pathlib.Path(save_folder)
         save_folder_path.mkdir(parents=True, exist_ok=True)
