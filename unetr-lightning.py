@@ -3,6 +3,7 @@
 # ! <<<
 import sys
 import pathlib
+from monai.transforms.utils import allow_missing_keys_mode
 # ! >>>
 import os
 import shutil
@@ -25,6 +26,12 @@ from monai.transforms import (
     # ! <<<
     # RandCropByPosNegLabeld,
     Resized,
+    # BatchInverseTransform,
+    EnsureTyped,
+    Activationsd,
+    Invertd,
+    AsDiscreted,
+    Identityd,
     # ! >>>
     RandShiftIntensityd,
     ScaleIntensityRanged,
@@ -64,7 +71,7 @@ print_config()
 directory = os.environ.get("MONAI_DATA_DIRECTORY")
 # ! <<<
 # root_dir = tempfile.mkdtemp() if directory is None else directory
-root_dir = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/unetr_output/'
+root_dir = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/unetr_debug/'
 # ! >>>
 print(root_dir)
 
@@ -128,12 +135,14 @@ class Net(pytorch_lightning.LightningModule):
         datalist = load_decathlon_datalist(datasets, True, "training")
         val_files = load_decathlon_datalist(datasets, True, "validation")
 
-        train_transforms = Compose(
+        mode=['area', 'nearest']
+
+        self.train_transforms = Compose(
             [
                 LoadImaged(keys=["image", "label"]),
                 AddChanneld(keys=["image", "label"]),
-                Resized(keys=['image', 'label'], spatial_size=[96, 96, 96]),
                 # ! <<<
+                Resized(keys=['image', 'label'], spatial_size=[96, 96, 96], mode=mode),
                 # Spacingd(
                 #     keys=["image", "label"],
                 #     pixdim=(1.5, 1.5, 2.0),
@@ -194,12 +203,14 @@ class Net(pytorch_lightning.LightningModule):
                 ToTensord(keys=["image", "label"]),
             ]
         )
-        val_transforms = Compose(
+        # ! <<<
+        # self.val_transforms = self.train_transforms
+        self.val_transforms = Compose(
             [
                 LoadImaged(keys=["image", "label"]),
                 AddChanneld(keys=["image", "label"]),
-                Resized(keys=['image', 'label'], spatial_size=[96, 96, 96]),
                 # ! <<<
+                Resized(keys=['image', 'label'], spatial_size=[96, 96, 96], mode=mode),
                 # Spacingd(
                 #     keys=["image", "label"],
                 #     pixdim=(1.5, 1.5, 2.0),
@@ -226,16 +237,74 @@ class Net(pytorch_lightning.LightningModule):
             ]
         )
 
+        # Ref: https://github.com/Project-MONAI/tutorials/blob/0.6.0/3d_segmentation/torch/unet_inference_dict.py
+        # TODO
+        self.post_transforms = Compose([
+            # EnsureTyped(keys="pred"), 
+            EnsureTyped(keys=['pred']), 
+            Activationsd(keys=['pred'], sigmoid=True),
+            Invertd(
+                keys=['pred'],  # invert the `pred` data field, also support multiple fields
+                transform=self.val_transforms,
+                orig_keys='image',  # get the previously applied pre_transforms information on the `img` data field,
+                                # then invert `pred` based on this information. we can use same info
+                                # for multiple fields, also support different orig_keys for different fields
+                meta_keys=['pred_meta_dict'],  # key field to save inverted meta data, every item maps to `keys`
+                orig_meta_keys='image_meta_dict',  # get the meta data from `img_meta_dict` field when inverting,
+                                                # for example, may need the `affine` to invert `Spacingd` transform,
+                                                # multiple fields can use the same meta data to invert
+                meta_key_postfix='meta_dict',  # if `meta_keys=None`, use "{keys}_{meta_key_postfix}" as the meta key,
+                                            # if `orig_meta_keys=None`, use "{orig_keys}_{meta_key_postfix}",
+                                            # otherwise, no need this arg during inverting
+                nearest_interp=False,  # don't change the interpolation mode to "nearest" when inverting transforms
+                                    # to ensure a smooth output, then execute `AsDiscreted` transform
+                to_tensor=True,  # convert to PyTorch Tensor after inverting
+            ),
+            # ! <<<
+            # AsDiscreted(keys="pred", threshold_values=True),
+            AsDiscreted(keys=['pred'], threshold_values=True, argmax=True, to_onehot=2, num_classes=2),
+            # SaveImaged(keys="pred", meta_keys="pred_meta_dict", output_dir="./out", output_postfix="seg", resample=False),
+            # ! >>>
+        ])
+        # self.post_transforms = Compose([
+        #     # EnsureTyped(keys="pred"), 
+        #     EnsureTyped(keys=['label', 'pred']), 
+        #     Activationsd(keys=['label', 'pred'], sigmoid=True),
+        #     Invertd(
+        #         keys=['label', 'pred'],  # invert the `pred` data field, also support multiple fields
+        #         transform=self.val_transforms,
+        #         orig_keys='image',  # get the previously applied pre_transforms information on the `img` data field,
+        #                         # then invert `pred` based on this information. we can use same info
+        #                         # for multiple fields, also support different orig_keys for different fields
+        #         meta_keys=['label_meta_dict', 'pred_meta_dict'],  # key field to save inverted meta data, every item maps to `keys`
+        #         orig_meta_keys='image_meta_dict',  # get the meta data from `img_meta_dict` field when inverting,
+        #                                         # for example, may need the `affine` to invert `Spacingd` transform,
+        #                                         # multiple fields can use the same meta data to invert
+        #         meta_key_postfix='meta_dict',  # if `meta_keys=None`, use "{keys}_{meta_key_postfix}" as the meta key,
+        #                                     # if `orig_meta_keys=None`, use "{orig_keys}_{meta_key_postfix}",
+        #                                     # otherwise, no need this arg during inverting
+        #         nearest_interp=False,  # don't change the interpolation mode to "nearest" when inverting transforms
+        #                             # to ensure a smooth output, then execute `AsDiscreted` transform
+        #         to_tensor=True,  # convert to PyTorch Tensor after inverting
+        #     ),
+        #     # ! <<<
+        #     # AsDiscreted(keys="pred", threshold_values=True),
+        #     AsDiscreted(keys=['label', 'pred'], threshold_values=True, argmax=True, to_onehot=2, num_classes=2),
+        #     # SaveImaged(keys="pred", meta_keys="pred_meta_dict", output_dir="./out", output_postfix="seg", resample=False),
+        #     # ! >>>
+        # ])
+        # ! >>>
+
         self.train_ds = CacheDataset(
             data=datalist,
-            transform=train_transforms,
+            transform=self.train_transforms,
             cache_num=24,
             cache_rate=1.0,
             num_workers=8,
         )
         self.val_ds = CacheDataset(
             data=val_files,
-            transform=val_transforms,
+            transform=self.val_transforms,
             cache_num=6,
             cache_rate=1.0,
             num_workers=8,
@@ -284,31 +353,35 @@ class Net(pytorch_lightning.LightningModule):
         images, labels = batch["image"], batch["label"]
         roi_size = (96, 96, 96)
         sw_batch_size = 4
-        outputs = sliding_window_inference(
-            images, roi_size, sw_batch_size, self.forward
-        )
-        loss = self.loss_function(outputs, labels)
-        outputs = [self.post_pred(i) for i in decollate_batch(outputs)]
-        labels = [self.post_label(i) for i in decollate_batch(labels)]
+
         # ! <<< Offline Predict
-        img_number = pathlib.Path(batch['label_meta_dict']['filename_or_obj'][0]).parent.name
+        # outputs = sliding_window_inference(images, roi_size, sw_batch_size, self.forward)
+        # loss = self.loss_function(outputs, labels)
+        # outputs = [self.post_pred(i) for i in decollate_batch(outputs)]
+        # labels = [self.post_label(i) for i in decollate_batch(labels)]
+        batch['pred'] = sliding_window_inference(images, roi_size, sw_batch_size, self.forward)
+
+        loss = self.loss_function(batch['pred'], labels)
+        self.dice_metric(y_pred=batch['pred'], y=labels)
+
+        batch = [self.post_transforms(i) for i in decollate_batch(batch)]
+
+        img_number = pathlib.Path(batch[0]['label_meta_dict']['filename_or_obj']).parent.name
         save_folder = root_dir + str(self.current_epoch) + '/' + img_number + '/'
-        
         save_folder_path = pathlib.Path(save_folder)
         save_folder_path.mkdir(parents=True, exist_ok=True)
 
-        _, max_output = outputs[0].detach().cpu().max(axis=0, keepdim=False)
-        max_output =  max_output.numpy()
-        output_name =  save_folder + img_number + '_predict.nii.gz'
-        write_nifti(max_output, output_name)
+        # * Save image
+        write_nifti(batch[0]['image'].detach().cpu().squeeze().numpy(), save_folder + img_number + '_' + 'image.nii.gz')
 
-        _, max_label = labels[0].detach().cpu().max(axis=0, keepdim=False)
-        max_label = max_label.numpy()
-        label_name = save_folder + img_number + '_label.nii.gz'
-        write_nifti(max_label, label_name)
+        # * Save label
+        write_nifti(batch[0]['label'].detach().cpu().squeeze().numpy(), save_folder + img_number + '_' + 'label.nii.gz')
+
+        # * Save pred
+        write_nifti(batch[0]['pred'].detach().cpu().max(axis=0, keepdim=False)[1].numpy(), save_folder + img_number + '_' + 'pred.nii.gz')
+        sys.exit()
         # ! >>>
-        self.dice_metric(y_pred=outputs, y=labels)
-        return {"val_loss": loss, "val_number": len(outputs)}
+        return {"val_loss": loss, "val_number": len(batch[0]['pred'])}
 
     def validation_epoch_end(self, outputs):
         val_loss, num_items = 0, 0
@@ -346,21 +419,21 @@ checkpoint_callback = ModelCheckpoint(
 
 # initialise Lightning's trainer.
 # ! <<<
-trainer = pytorch_lightning.Trainer(
-    gpus=[0],
-    max_epochs=net.max_epochs,
-    check_val_every_n_epoch=net.check_val,
-    callbacks=checkpoint_callback,
-    default_root_dir=root_dir,
-)
 # trainer = pytorch_lightning.Trainer(
 #     gpus=[0],
-#     limit_train_batches=1,
-#     max_epochs=2000,
-#     check_val_every_n_epoch=1,
+#     max_epochs=net.max_epochs,
+#     check_val_every_n_epoch=net.check_val,
 #     callbacks=checkpoint_callback,
 #     default_root_dir=root_dir,
 # )
+trainer = pytorch_lightning.Trainer(
+    gpus=[0],
+    limit_train_batches=1,
+    max_epochs=2000,
+    check_val_every_n_epoch=1,
+    callbacks=checkpoint_callback,
+    default_root_dir=root_dir,
+)
 # ! >>>
 
 # train
