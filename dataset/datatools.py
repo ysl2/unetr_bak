@@ -200,18 +200,13 @@ def get_roi(img_path, mask_path):
     y_mid = y_min + y_radis
     z_mid = z_min + z_radis
 
-    # x_roi_min = x_mid - max_radis
-    # x_roi_max = x_mid + max_radis
-    # y_roi_min = y_mid - max_radis
-    # y_roi_max = y_mid + max_radis
-    # z_roi_min = z_mid - max_radis
-    # z_roi_max = z_mid + max_radis
-    x_roi_min = max(x_mid - max_radis, 0)
-    x_roi_max = min(x_mid + max_radis, img_shape[2])
-    y_roi_min = max(y_mid - max_radis, 0)
-    y_roi_max = min(y_mid + max_radis, img_shape[1])
-    z_roi_min = max(z_mid - max_radis, 0)
-    z_roi_max = min(z_mid + max_radis, img_shape[0])
+    # Note: If the voxal concatinates with the image boundary, there will be a bug that the cropped array will not be a cube. It need to be fixed in the future.
+    x_roi_min = max(x_mid - max_radis - 1, 0)
+    x_roi_max = min(x_mid + max_radis + 1, img_shape[2])
+    y_roi_min = max(y_mid - max_radis - 1, 0)
+    y_roi_max = min(y_mid + max_radis + 1, img_shape[1])
+    z_roi_min = max(z_mid - max_radis - 1, 0)
+    z_roi_max = min(z_mid + max_radis + 1, img_shape[0])
 
     mask_roi = mask[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
     mask_roi_array = mask_array[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
@@ -224,6 +219,10 @@ def get_roi(img_path, mask_path):
     print(max_radis)
     print(x_mid, y_mid, z_mid)
     print(x_roi_min, x_roi_max, y_roi_min, y_roi_max, z_roi_min, z_roi_max)
+    # mask_sum = np.sum(mask_array)
+    # roi_sum = np.sum(mask_roi_array)
+    # print(mask_sum, roi_sum)
+    # sys.exit()
 
     img_out = nib.Nifti1Image(img_roi_array, affine=np.eye(4))
     img_out.header.get_xyzt_units()
