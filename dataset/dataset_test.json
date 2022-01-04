@@ -1,0 +1,60 @@
+{
+    "training": [
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/306865/306865_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/306865/306865_GTV-T_MASK.nii.gz"
+        },
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/104049/104049_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/104049/104049_GTV-T_MASK.nii.gz"
+        },
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/111974/111974_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/111974/111974_GTV-T_MASK.nii.gz"
+        },
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liyong/98746/98746_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liyong/98746/98746_GTV-T_MASK.nii.gz"
+        },
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/308201/308201_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/308201/308201_GTV-T_MASK.nii.gz"
+        },
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/158037/158037_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/158037/158037_GTV-T_MASK.nii.gz"
+        },
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/zhangchi/295705/295705_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/zhangchi/295705/295705_GTV-T_MASK.nii.gz"
+        },
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/233845/233845_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/liutong/233845/233845_GTV-T_MASK.nii.gz"
+        }
+    ],
+    "validation": [
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/yanxiang/92781/92781_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/yanxiang/92781/92781_GTV-T_MASK.nii.gz"
+        },
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/yanxiang/118997/118997_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan/yanxiang/118997/118997_GTV-T_MASK.nii.gz"
+        }
+    ],
+    "test": [
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/beijing/G-L/936044/936044_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/beijing/G-L/936044/936044_GTV T_MASK.nii.gz"
+        },
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/beijing/G-L/954839-101117/954839-101117_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/beijing/G-L/954839-101117/954839-101117_GTV T_MASK.nii.gz"
+        },
+        {
+            "image": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/beijing/G-L/890245/890245_CT.nii.gz",
+            "label": "/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/beijing/G-L/890245/890245_GTV T_MASK.nii.gz"
+        }
+    ]
+}

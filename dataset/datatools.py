@@ -5,11 +5,12 @@ import pathlib
 import json
 from random import sample
 import sys
+import SimpleITK as sitk
 
 # patterns = ['* T*.gz', '*-T*.gz', '*T1*.gz']
 
 
-def get_files(pathstr, img_pattern, label_patterns):
+def get_pairs(pathstr, img_pattern, label_patterns):
     """Get image-label pair from sepcific label_patterns and a single image_pattern.
 
     Args:
@@ -139,3 +140,21 @@ def check_contrast(datastr):
             print(ct_array.min(), ct_array.max(), img)
             f.write(f'{ct_array.min()}, {ct_array.max()}, {img}\n')
             f.flush()
+
+
+def get_targets(pathstr, patterns):
+    """
+    Find some target files in a specific folder path.
+    Args:
+        pathstr (str): A specific folder path.
+        patterns (list(str)): The patterns you want to find.
+    Return:
+        target_files (list): A list of target files.
+    """
+    path = pathlib.Path(pathstr)
+    if patterns and isinstance(patterns, list):
+        target_files = []
+        for pattern in patterns:
+            target_files.extend([item.as_posix()
+                                for item in list(path.rglob(pattern))])
+        return target_files
