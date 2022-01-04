@@ -6,6 +6,8 @@ import json
 from random import sample
 import sys
 import SimpleITK as sitk
+import numpy as np
+import nibabel as nib
 
 # patterns = ['* T*.gz', '*-T*.gz', '*T1*.gz']
 
@@ -158,3 +160,77 @@ def get_targets(pathstr, patterns):
             target_files.extend([item.as_posix()
                                 for item in list(path.rglob(pattern))])
         return target_files
+
+def get_roi(img_path, mask_path):
+    img = sitk.ReadImage(img_path)
+    img_array = sitk.GetArrayViewFromImage(img)
+    img_shape = img_array.shape
+
+    mask = sitk.ReadImage(mask_path)
+    mask_array = sitk.GetArrayViewFromImage(mask)
+    mask_shape = mask_array.shape
+
+    for i in range(len(img_shape)):
+        if img_shape[i] != mask_shape[i]:
+            print('Img does not match with mask. They are in different shape')
+            return
+
+    nozero = np.nonzero(mask_array)
+
+    # The first dimension: z
+    # The second dimension: y
+    # The third dimension: x
+    x_min = nozero[2].min()
+    x_max = nozero[2].max()
+    y_min = nozero[1].min()
+    y_max = nozero[1].max()
+    z_min = nozero[0].min()
+    z_max = nozero[0].max()
+
+    x_width = x_max - x_min + 1
+    y_width = y_max - y_min + 1
+    z_width = z_max - z_min + 1
+
+    x_radis = x_width // 2
+    y_radis = y_width // 2
+    z_radis = z_width // 2
+    max_radis = max(x_radis, y_radis, z_radis)
+
+    x_mid = x_min + x_radis
+    y_mid = y_min + y_radis
+    z_mid = z_min + z_radis
+
+    # x_roi_min = x_mid - max_radis
+    # x_roi_max = x_mid + max_radis
+    # y_roi_min = y_mid - max_radis
+    # y_roi_max = y_mid + max_radis
+    # z_roi_min = z_mid - max_radis
+    # z_roi_max = z_mid + max_radis
+    x_roi_min = max(x_mid - max_radis, 0)
+    x_roi_max = min(x_mid + max_radis, img_shape[2])
+    y_roi_min = max(y_mid - max_radis, 0)
+    y_roi_max = min(y_mid + max_radis, img_shape[1])
+    z_roi_min = max(z_mid - max_radis, 0)
+    z_roi_max = min(z_mid + max_radis, img_shape[0])
+
+    mask_roi = mask[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
+    mask_roi_array = mask_array[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
+    img_roi = img[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
+    img_roi_array = img_array[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
+
+    print(x_min, x_max, y_min, y_max, z_min, z_max)
+    print(x_width, y_width, z_width)
+    print(x_radis, y_radis, z_radis)
+    print(max_radis)
+    print(x_mid, y_mid, z_mid)
+    print(x_roi_min, x_roi_max, y_roi_min, y_roi_max, z_roi_min, z_roi_max)
+
+    img_out = nib.Nifti1Image(img_roi_array, affine=np.eye(4))
+    img_out.header.get_xyzt_units()
+    img_out.to_filename('test_img.nii.gz')
+
+    mask_out = nib.Nifti1Image(mask_roi_array, affine=np.eye(4))
+    mask_out.header.get_xyzt_units()
+    mask_out.to_filename('test_mask.nii.gz')
+
+    sys.exit()
