@@ -4,6 +4,7 @@ import SimpleITK as sitk
 import pathlib
 import os
 import sys
+import nibabel as nib
 
 
 database_linux = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/'
@@ -37,34 +38,46 @@ output_linux = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/unetr_output'
     #     print(item.as_posix())
 
 
-# save_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai'
-# for item in pathlib.Path(database_linux).rglob('**/*GTV-T*.nii.gz'):
-#     image = pathlib.Path(item.parent.as_posix() + os.sep + item.name.split('_')[0] + '_CT.nii.gz')
-#     dt.get_roi(image.as_posix(), item.as_posix(), save_root=save_root)
-#     sys.exit(0)
 
 
-save_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai'
+def get_roi_total():
+    save_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai'
 
-file = open('dataset/dataset.json', 'r')
-dataset = json.load(file)
+    file = open('dataset/dataset.json', 'r')
+    dataset = json.load(file)
 
-tags = ['training', 'validation', 'test']
+    tags = ['training', 'validation', 'test']
 
-max_radis = -1
-with open('crop_log.txt', 'w') as f:
-    for tag in tags:
-        for i in range(len(dataset[tag])):
-            img_path = dataset[tag][i]['image']
-            mask_path = dataset[tag][i]['label']
-            return_value = dt.get_roi(img_path, mask_path, save_root)
-            if return_value == -1:
-                f.write(f'-1 | {img_path}')
-                f.flush()
-            if return_value == -2:
-                f.write(f'-2 | {img_path}')
-                f.flush()
-            if return_value > max_radis:
-                max_radis = return_value
-                print(f'Current max radis: {max_radis}')
-print(f'Total max radis: {max_radis}')
+    max_radis = -1
+    min_radis = 9999
+    with open('crop_log.txt', 'w') as f:
+        for tag in tags:
+            for i in range(len(dataset[tag])):
+                img_path = dataset[tag][i]['image']
+                mask_path = dataset[tag][i]['label']
+                return_value = dt.get_roi(img_path, mask_path, save_root)
+                if return_value < 0:
+                    f.write(f'{return_value} | {img_path}\n')
+                    f.flush()
+                if return_value > max_radis:
+                    max_radis = return_value
+                    print(f'Current max radis: {max_radis}')
+                if 0 < return_value < min_radis:
+                    min_radis = return_value
+                    print(f'Current min radis: {min_radis}')
+        print(f'Total max radis: {max_radis}')
+        print(f'Total min radis: {min_radis}')
+        f.write(f'Total max radis: {max_radis}\n')
+        f.write(f'Total min radis: {min_radis}\n')
+        f.flush()
+
+def get_roi_single():
+    save_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai'
+    for item in pathlib.Path(database_linux).rglob('**/*295530*GTV-T*.nii.gz'):
+        image = pathlib.Path(item.parent.as_posix() + os.sep + item.name.split('_')[0] + '_CT.nii.gz')
+        dt.get_roi(image.as_posix(), item.as_posix(), save_root=save_root)
+        sys.exit(0)
+
+if __name__ == '__main__':
+    get_roi_total()
+    # get_roi_single()

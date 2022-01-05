@@ -162,12 +162,12 @@ def get_targets(pathstr, patterns):
 
 
 def get_roi(img_path, mask_path, save_root):
-    img = sitk.ReadImage(img_path)
-    img_array = sitk.GetArrayViewFromImage(img)
+    img = nib.load(img_path)
+    img_array = img.get_fdata()
     img_shape = img_array.shape
 
-    mask = sitk.ReadImage(mask_path)
-    mask_array = sitk.GetArrayViewFromImage(mask)
+    mask = nib.load(mask_path)
+    mask_array = mask.get_fdata()
     mask_shape = mask_array.shape
 
     for i in range(len(img_shape)):
@@ -176,16 +176,19 @@ def get_roi(img_path, mask_path, save_root):
             return -1
 
     nozero = np.nonzero(mask_array)
+    if not nozero:
+        # No mask
+        return -3
 
-    # The first dimension: z
+    # The first dimension: x
     # The second dimension: y
-    # The third dimension: x
-    x_min = nozero[2].min()
-    x_max = nozero[2].max()
+    # The third dimension: z
+    x_min = nozero[0].min()
+    x_max = nozero[0].max()
     y_min = nozero[1].min()
     y_max = nozero[1].max()
-    z_min = nozero[0].min()
-    z_max = nozero[0].max()
+    z_min = nozero[2].min()
+    z_max = nozero[2].max()
 
     x_width = x_max - x_min + 1
     y_width = y_max - y_min + 1
@@ -196,33 +199,38 @@ def get_roi(img_path, mask_path, save_root):
     z_radis = z_width // 2
     max_radis = max(x_radis, y_radis, z_radis)
 
-    x_mid = x_min + x_radis
-    y_mid = y_min + y_radis
-    z_mid = z_min + z_radis
+    x_center = x_min + x_radis
+    y_center = y_min + y_radis
+    z_center = z_min + z_radis
+
+    x_roi_min_orig = x_center - (max_radis + 1)
+    x_roi_max_orig = x_center + (max_radis + 1)
+    y_roi_min_orig = y_center - (max_radis + 1)
+    y_roi_max_orig = y_center + (max_radis + 1)
+    z_roi_min_orig = z_center - (max_radis + 1)
+    z_roi_max_orig = z_center + (max_radis + 1)
 
     # Note: If the voxal concatinates with the image boundary, there will be a bug that the cropped array will not be a cube. It need to be fixed in the future.
-    x_roi_min = max(x_mid - (max_radis + 1), 0)
-    x_roi_max = min(x_mid + (max_radis + 1), img_shape[2])
-    y_roi_min = max(y_mid - (max_radis + 1), 0)
-    y_roi_max = min(y_mid + (max_radis + 1), img_shape[1])
-    z_roi_min = max(z_mid - (max_radis + 1), 0)
-    z_roi_max = min(z_mid + (max_radis + 1), img_shape[0])
+    x_roi_min_norm = max(x_roi_min_orig, 0)
+    x_roi_max_norm = min(x_roi_max_orig, img_shape[0])
+    y_roi_min_norm = max(y_roi_min_orig, 0)
+    y_roi_max_norm = min(y_roi_max_orig, img_shape[1])
+    z_roi_min_norm = max(z_roi_min_orig, 0)
+    z_roi_max_norm = min(z_roi_max_orig, img_shape[2])
 
-    mask_roi = mask[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
-    mask_roi_array = mask_array[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
-    img_roi = img[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
-    img_roi_array = img_array[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
+    mask_roi_array = mask_array[x_roi_min_norm:x_roi_max_norm, y_roi_min_norm:y_roi_max_norm, z_roi_min_norm:z_roi_max_norm]
+    img_roi_array = img_array[x_roi_min_norm:x_roi_max_norm, y_roi_min_norm:y_roi_max_norm, z_roi_min_norm:z_roi_max_norm]
 
-    if mask_roi_array.shape[0] != mask_roi_array.shape[1] or mask_roi_array.shape[0] != mask_roi_array.shape[2]:
-        # The cropped area is not a cube. Error generated, return.
-        return -2
-
+    # print(img.shape)
+    # print(nozero)
     # print(x_min, x_max, y_min, y_max, z_min, z_max)
+    # print(x_center, y_center, z_center)
     # print(x_width, y_width, z_width)
     # print(x_radis, y_radis, z_radis)
     # print(max_radis)
-    # print(x_mid, y_mid, z_mid)
-    # print(x_roi_min, x_roi_max, y_roi_min, y_roi_max, z_roi_min, z_roi_max)
+    # print(x_roi_min_orig, x_roi_max_orig, y_roi_min_orig, y_roi_max_orig, z_roi_min_orig, z_roi_max_orig)
+    # print(x_roi_min_norm, x_roi_max_norm, y_roi_min_norm, y_roi_max_norm, z_roi_min_norm, z_roi_max_norm)
+    # print(mask_roi_array.shape)
 
     img_path = pathlib.Path(img_path)
     mask_path = pathlib.Path(mask_path)
@@ -236,6 +244,10 @@ def get_roi(img_path, mask_path, save_root):
 
     print(f'{img_relative} | {mask_relative}')
 
+    if mask_roi_array.shape[0] != mask_roi_array.shape[1] or mask_roi_array.shape[0] != mask_roi_array.shape[2]:
+        # The cropped area is not a cube. Error generated, return.
+        return -2
+
     img_savefolder = img_savename.parent
     mask_savefolder = mask_savename.parent
 
@@ -245,11 +257,11 @@ def get_roi(img_path, mask_path, save_root):
         mask_savefolder.mkdir(parents=True, exist_ok=True)
 
     img_out = nib.Nifti1Image(img_roi_array, affine=np.eye(4))
-    img_out.header.get_xyzt_units()
+    # img_out.header.get_xyzt_units()
     img_out.to_filename(img_savename.as_posix())
 
     mask_out = nib.Nifti1Image(mask_roi_array, affine=np.eye(4))
-    mask_out.header.get_xyzt_units()
+    # img_out.header.get_xyzt_units()
     mask_out.to_filename(mask_savename.as_posix())
 
     return max_radis
