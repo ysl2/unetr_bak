@@ -2,14 +2,13 @@
 
 
 import pathlib
+import os
 import json
 from random import sample
 import sys
 import SimpleITK as sitk
 import numpy as np
 import nibabel as nib
-
-# patterns = ['* T*.gz', '*-T*.gz', '*T1*.gz']
 
 
 def get_pairs(pathstr, img_pattern, label_patterns):
@@ -89,7 +88,7 @@ def merge_iterate(pathstr1, pathstr2):
     return sorted_subitem1, sorted_subitem2
 
 
-def json_generate(train_val_path, test_path, patterns=['* T*.gz', '*-T*.gz', '*T1*.gz']):
+def json_generate(train_val_path, test_path, mask_patterns=['* T*.gz', '*-T*.gz', '*T1*.gz'], img_pattern='*CT*.gz'):
     """生成数据集的json文件
 
     Args:
@@ -101,8 +100,8 @@ def json_generate(train_val_path, test_path, patterns=['* T*.gz', '*-T*.gz', '*T
 
     data = []
 
-    for pattern in patterns:
-        data.extend({'image': list(item.parent.rglob('*CT*.gz'))[0].as_posix(
+    for pattern in mask_patterns:
+        data.extend({'image': list(item.parent.rglob(img_pattern))[0].as_posix(
         ), 'label': item.as_posix()} for item in list(path.rglob(pattern)) if 'LACKT' not in item.name)
 
     data_train = sample(data, int(len(data) * 0.8))
@@ -117,7 +116,7 @@ def json_generate(train_val_path, test_path, patterns=['* T*.gz', '*-T*.gz', '*T
     json_dict['test'] = []
 
     for pattern in patterns:
-        json_dict['test'].extend({'image': list(item.parent.rglob('*CT*.gz'))[0].as_posix(), 'label': item.as_posix()}
+        json_dict['test'].extend({'image': list(item.parent.rglob(img_pattern))[0].as_posix(), 'label': item.as_posix()}
                                  for item in list(path_test.rglob(pattern)) if 'LACKT' not in item.name)
 
     json_file = json.dumps(json_dict, indent=4, sort_keys=False)
@@ -161,7 +160,8 @@ def get_targets(pathstr, patterns):
                                 for item in list(path.rglob(pattern))])
         return target_files
 
-def get_roi(img_path, mask_path):
+
+def get_roi(img_path, mask_path, save_root):
     img = sitk.ReadImage(img_path)
     img_array = sitk.GetArrayViewFromImage(img)
     img_shape = img_array.shape
@@ -172,8 +172,8 @@ def get_roi(img_path, mask_path):
 
     for i in range(len(img_shape)):
         if img_shape[i] != mask_shape[i]:
-            print('Img does not match with mask. They are in different shape')
-            return
+            # Img does not match with mask. They are in different shape.
+            return -1
 
     nozero = np.nonzero(mask_array)
 
@@ -201,35 +201,55 @@ def get_roi(img_path, mask_path):
     z_mid = z_min + z_radis
 
     # Note: If the voxal concatinates with the image boundary, there will be a bug that the cropped array will not be a cube. It need to be fixed in the future.
-    x_roi_min = max(x_mid - max_radis - 1, 0)
-    x_roi_max = min(x_mid + max_radis + 1, img_shape[2])
-    y_roi_min = max(y_mid - max_radis - 1, 0)
-    y_roi_max = min(y_mid + max_radis + 1, img_shape[1])
-    z_roi_min = max(z_mid - max_radis - 1, 0)
-    z_roi_max = min(z_mid + max_radis + 1, img_shape[0])
+    x_roi_min = max(x_mid - (max_radis + 1), 0)
+    x_roi_max = min(x_mid + (max_radis + 1), img_shape[2])
+    y_roi_min = max(y_mid - (max_radis + 1), 0)
+    y_roi_max = min(y_mid + (max_radis + 1), img_shape[1])
+    z_roi_min = max(z_mid - (max_radis + 1), 0)
+    z_roi_max = min(z_mid + (max_radis + 1), img_shape[0])
 
     mask_roi = mask[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
     mask_roi_array = mask_array[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
     img_roi = img[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
     img_roi_array = img_array[z_roi_min:z_roi_max, y_roi_min:y_roi_max, x_roi_min:x_roi_max]
 
-    print(x_min, x_max, y_min, y_max, z_min, z_max)
-    print(x_width, y_width, z_width)
-    print(x_radis, y_radis, z_radis)
-    print(max_radis)
-    print(x_mid, y_mid, z_mid)
-    print(x_roi_min, x_roi_max, y_roi_min, y_roi_max, z_roi_min, z_roi_max)
-    # mask_sum = np.sum(mask_array)
-    # roi_sum = np.sum(mask_roi_array)
-    # print(mask_sum, roi_sum)
-    # sys.exit()
+    if mask_roi_array.shape[0] != mask_roi_array.shape[1] or mask_roi_array.shape[0] != mask_roi_array.shape[2]:
+        # The cropped area is not a cube. Error generated, return.
+        return -2
+
+    # print(x_min, x_max, y_min, y_max, z_min, z_max)
+    # print(x_width, y_width, z_width)
+    # print(x_radis, y_radis, z_radis)
+    # print(max_radis)
+    # print(x_mid, y_mid, z_mid)
+    # print(x_roi_min, x_roi_max, y_roi_min, y_roi_max, z_roi_min, z_roi_max)
+
+    img_path = pathlib.Path(img_path)
+    mask_path = pathlib.Path(mask_path)
+    save_root = pathlib.Path(save_root)
+
+    img_relative = img_path.relative_to(save_root)
+    mask_relative = mask_path.relative_to(save_root)
+
+    img_savename = pathlib.Path(save_root.as_posix() + os.sep + 'cropped' + os.sep + img_relative.as_posix())
+    mask_savename = pathlib.Path(save_root.as_posix() + os.sep + 'cropped' + os.sep + mask_relative.as_posix())
+
+    print(f'{img_relative} | {mask_relative}')
+
+    img_savefolder = img_savename.parent
+    mask_savefolder = mask_savename.parent
+
+    if not img_savefolder.exists():
+        img_savefolder.mkdir(parents=True, exist_ok=True)
+    if not mask_savefolder.exists():
+        mask_savefolder.mkdir(parents=True, exist_ok=True)
 
     img_out = nib.Nifti1Image(img_roi_array, affine=np.eye(4))
     img_out.header.get_xyzt_units()
-    img_out.to_filename('test_img.nii.gz')
+    img_out.to_filename(img_savename.as_posix())
 
     mask_out = nib.Nifti1Image(mask_roi_array, affine=np.eye(4))
     mask_out.header.get_xyzt_units()
-    mask_out.to_filename('test_mask.nii.gz')
+    mask_out.to_filename(mask_savename.as_posix())
 
-    sys.exit()
+    return max_radis
