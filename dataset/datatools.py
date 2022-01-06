@@ -160,13 +160,81 @@ def get_targets(pathstr, patterns):
                                 for item in list(path.rglob(pattern))])
         return target_files
 
+def no_label():
+    from monai.transforms import (
+        AddChanneld,
+        Compose,
+        LoadImaged,
+        ToTensord,
+    )
 
-def get_roi(img_path, mask_path, save_root):
-    img = nib.load(img_path)
+    from monai.data import (
+        DataLoader,
+        CacheDataset,
+        load_decathlon_datalist,
+    )
+
+    import pathlib
+
+    orig_transforms = Compose(
+        [
+            LoadImaged(keys=['image', 'label']),
+            AddChanneld(keys=['image', 'label']),
+            ToTensord(keys=['image', 'label'])
+        ]
+    )
+
+    split_JSON = "dataset.json"
+    datasets = split_JSON
+
+    train_files = load_decathlon_datalist(datasets, True, "all")
+
+    orig_ds = CacheDataset(
+        data=train_files,
+        transform=orig_transforms,
+        cache_num=24,
+        cache_rate=1.0,
+        num_workers=8,
+    )
+
+    # 未做变换的训练集
+    orig_loader = DataLoader(orig_ds, batch_size=1, shuffle=False, num_workers=8, pin_memory=True)
+
+    # no_label = [item['image_meta_dict']['filename_or_obj'][0] for item in orig_loader if item['label'].sum() == 0 ]
+
+    with open(pathlib.Path('no_label.txt').as_posix(), 'w') as f:
+        for item in orig_loader:
+            if item['label'].sum() == 0:
+                print(item['label_meta_dict']['filename_or_obj'][0])
+                f.write(item['label_meta_dict']['filename_or_obj'][0] + '\n')
+                f.flush()
+
+    # with open(pathlib.Path('dataset', 'no_label.txt').as_posix(), 'w') as f:
+    #     for item in no_label:
+    #         f.write(item + '\n')
+
+
+
+def get_roi(img_path, mask_path, save_root, save_folder_name='cropped', radius=None):
+    # Get save path.
+    img_path = pathlib.Path(img_path)
+    mask_path = pathlib.Path(mask_path)
+    save_root = pathlib.Path(save_root)
+
+    img_relative = img_path.relative_to(save_root)
+    mask_relative = mask_path.relative_to(save_root)
+
+    img_savename = pathlib.Path(save_root.as_posix() + os.sep + save_folder_name + os.sep + img_relative.as_posix())
+    mask_savename = pathlib.Path(save_root.as_posix() + os.sep + save_folder_name + os.sep + mask_relative.as_posix())
+
+    print(f'{img_relative} | {mask_relative}')
+
+    # Load img and mask.
+    img = nib.load(img_path.as_posix())
     img_array = img.get_fdata()
     img_shape = img_array.shape
 
-    mask = nib.load(mask_path)
+    mask = nib.load(mask_path.as_posix())
     mask_array = mask.get_fdata()
     mask_shape = mask_array.shape
 
@@ -176,39 +244,40 @@ def get_roi(img_path, mask_path, save_root):
             return -1
 
     nozero = np.nonzero(mask_array)
-    if not nozero:
-        # No mask
-        return -3
 
-    # The first dimension: x
-    # The second dimension: y
-    # The third dimension: z
-    x_min = nozero[0].min()
-    x_max = nozero[0].max()
-    y_min = nozero[1].min()
-    y_max = nozero[1].max()
-    z_min = nozero[2].min()
-    z_max = nozero[2].max()
+    try:
+        # The first dimension: x
+        # The second dimension: y
+        # The third dimension: z
+        x_min = nozero[0].min()
+        x_max = nozero[0].max()
+        y_min = nozero[1].min()
+        y_max = nozero[1].max()
+        z_min = nozero[2].min()
+        z_max = nozero[2].max()
+    except:
+        # No mask.
+        return -3
 
     x_width = x_max - x_min + 1
     y_width = y_max - y_min + 1
     z_width = z_max - z_min + 1
 
-    x_radis = x_width // 2
-    y_radis = y_width // 2
-    z_radis = z_width // 2
-    max_radis = max(x_radis, y_radis, z_radis)
+    x_radius = x_width // 2
+    y_radius = y_width // 2
+    z_radius = z_width // 2
+    max_radius = max(x_radius, y_radius, z_radius) if not radius else radius
 
-    x_center = x_min + x_radis
-    y_center = y_min + y_radis
-    z_center = z_min + z_radis
+    x_center = x_min + x_radius
+    y_center = y_min + y_radius
+    z_center = z_min + z_radius
 
-    x_roi_min_orig = x_center - (max_radis + 1)
-    x_roi_max_orig = x_center + (max_radis + 1)
-    y_roi_min_orig = y_center - (max_radis + 1)
-    y_roi_max_orig = y_center + (max_radis + 1)
-    z_roi_min_orig = z_center - (max_radis + 1)
-    z_roi_max_orig = z_center + (max_radis + 1)
+    x_roi_min_orig = x_center - (max_radius + 1)
+    x_roi_max_orig = x_center + (max_radius + 1)
+    y_roi_min_orig = y_center - (max_radius + 1)
+    y_roi_max_orig = y_center + (max_radius + 1)
+    z_roi_min_orig = z_center - (max_radius + 1)
+    z_roi_max_orig = z_center + (max_radius + 1)
 
     # Note: If the voxal concatinates with the image boundary, there will be a bug that the cropped array will not be a cube. It need to be fixed in the future.
     x_roi_min_norm = max(x_roi_min_orig, 0)
@@ -226,27 +295,15 @@ def get_roi(img_path, mask_path, save_root):
     # print(x_min, x_max, y_min, y_max, z_min, z_max)
     # print(x_center, y_center, z_center)
     # print(x_width, y_width, z_width)
-    # print(x_radis, y_radis, z_radis)
-    # print(max_radis)
+    # print(x_radius, y_radius, z_radius)
+    # print(max_radius)
     # print(x_roi_min_orig, x_roi_max_orig, y_roi_min_orig, y_roi_max_orig, z_roi_min_orig, z_roi_max_orig)
     # print(x_roi_min_norm, x_roi_max_norm, y_roi_min_norm, y_roi_max_norm, z_roi_min_norm, z_roi_max_norm)
     # print(mask_roi_array.shape)
 
-    img_path = pathlib.Path(img_path)
-    mask_path = pathlib.Path(mask_path)
-    save_root = pathlib.Path(save_root)
-
-    img_relative = img_path.relative_to(save_root)
-    mask_relative = mask_path.relative_to(save_root)
-
-    img_savename = pathlib.Path(save_root.as_posix() + os.sep + 'cropped' + os.sep + img_relative.as_posix())
-    mask_savename = pathlib.Path(save_root.as_posix() + os.sep + 'cropped' + os.sep + mask_relative.as_posix())
-
-    print(f'{img_relative} | {mask_relative}')
-
-    if mask_roi_array.shape[0] != mask_roi_array.shape[1] or mask_roi_array.shape[0] != mask_roi_array.shape[2]:
-        # The cropped area is not a cube. Error generated, return.
-        return -2
+    # if mask_roi_array.shape[0] != mask_roi_array.shape[1] or mask_roi_array.shape[0] != mask_roi_array.shape[2]:
+    #     # The cropped area is not a cube. Error generated, return.
+    #     return -2
 
     img_savefolder = img_savename.parent
     mask_savefolder = mask_savename.parent
@@ -264,4 +321,4 @@ def get_roi(img_path, mask_path, save_root):
     # img_out.header.get_xyzt_units()
     mask_out.to_filename(mask_savename.as_posix())
 
-    return max_radis
+    return max_radius
