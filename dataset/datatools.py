@@ -290,6 +290,9 @@ def get_roi(img_path, mask_path, save_root, save_folder_name='cropped', radius=N
     mask_roi_array = mask_array[x_roi_min_norm:x_roi_max_norm, y_roi_min_norm:y_roi_max_norm, z_roi_min_norm:z_roi_max_norm]
     img_roi_array = img_array[x_roi_min_norm:x_roi_max_norm, y_roi_min_norm:y_roi_max_norm, z_roi_min_norm:z_roi_max_norm]
 
+    # Image intensity limitation and normalization.
+    img_roi_array = _scale_intensity(img_roi_array)
+
     # print(img.shape)
     # print(nozero)
     # print(x_min, x_max, y_min, y_max, z_min, z_max)
@@ -314,11 +317,63 @@ def get_roi(img_path, mask_path, save_root, save_folder_name='cropped', radius=N
         mask_savefolder.mkdir(parents=True, exist_ok=True)
 
     img_out = nib.Nifti1Image(img_roi_array, affine=np.eye(4))
-    # img_out.header.get_xyzt_units()
+    # Get image header for fix resolution.
+    img_out.header.set_zooms(img.header.get_zooms())
     img_out.to_filename(img_savename.as_posix())
 
     mask_out = nib.Nifti1Image(mask_roi_array, affine=np.eye(4))
-    # img_out.header.get_xyzt_units()
+    # Get mask header for fix resolution.
+    mask_out.header.set_zooms(mask.header.get_zooms())
     mask_out.to_filename(mask_savename.as_posix())
 
     return max_radius
+
+
+def _scale_intensity(img_array, a_min=0, a_max=1500, b_min=0, b_max=1):
+    # Image intensity limitation.
+    img_array[img_array > a_max] = 0
+
+    # Image intensity normalization.
+    img_array = (img_array - a_min) / (a_max - a_min)
+    img_array = img_array * (b_max - b_min) + b_min
+
+    return img_array
+
+def scale_intensity(img_path, save_root, a_min=0, a_max=1500, b_min=0, b_max=1, save_folder_name='scale_intensity_single'):
+    img_path = pathlib.Path(img_path)
+    save_root = pathlib.Path(save_root)
+
+    # Get image save path.
+    img_relative = img_path.relative_to(save_root)
+    img_savename = pathlib.Path(save_root.as_posix() + os.sep + save_folder_name + os.sep + img_relative.as_posix())
+    print(f'{img_relative}')
+
+    # Load image.
+    img = nib.load(img_path.as_posix())
+    img_array = img.get_fdata()
+    img_shape = img_array.shape
+
+
+    # Image intensity limitation.
+    img_array[img_array > a_max] = 0
+    # Image intensity normalization.
+    img_array = (img_array - a_min) / (a_max - a_min)
+    img_array = img_array * (b_max - b_min) + b_min
+
+    # Save image.
+    img_savefolder = img_savename.parent
+    if not img_savefolder.exists():
+        img_savefolder.mkdir(parents=True, exist_ok=True)
+
+    img_out = nib.Nifti1Image(img_array, affine=np.eye(4))
+    # Get image header for fix resolution.
+    img_out.header.set_zooms(img.header.get_zooms())
+    img_out.to_filename(img_savename.as_posix())
+
+
+def peek_image_intensity(img_path):
+    print(img_path)
+
+    img_path = pathlib.Path(img_path)
+    img = nib.load(img_path.as_posix())
+    return img.header.get_zooms()

@@ -80,6 +80,48 @@ def get_roi_single():
         print(return_value)
         sys.exit(0)
 
+
+def test_scale_intensity():
+    save_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai'
+    # for item in pathlib.Path(database_linux).rglob('**/*298225*GTV-T*.nii.gz'):
+    for item in pathlib.Path(database_linux).rglob('**/*GTV-T*.nii.gz'):
+        image = pathlib.Path(item.parent.as_posix() + os.sep + item.name.split('_')[0] + '_CT.nii.gz')
+        dt.scale_intensity(image.as_posix(), save_root=save_root)
+        sys.exit(0)
+
+
+def iter_intensity():
+    save_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai'
+
+    file = open('dataset/dataset.json', 'r')
+    dataset = json.load(file)
+
+    tags = ['training', 'validation', 'test']
+
+    intensity_x = None
+    intensity_y = None
+    intensity_z = None
+    record = None
+
+    for tag in tags:
+        for i in range(len(dataset[tag])):
+            img_path = dataset[tag][i]['image']
+            mask_path = dataset[tag][i]['label']
+            return_value = dt.peek_image_intensity(img_path)
+            if intensity_x == None:
+                intensity_x = return_value[0]
+                intensity_y = return_value[1]
+                intensity_z = return_value[2]
+                record = img_path
+            elif intensity_x != return_value[0]:
+                print('Got not equal intensity.')
+                print(f'{record} | ({intensity_x}, {intensity_y}, {intensity_z})')
+                print(f'{img_path} | {return_value}')
+                return
+
+
 if __name__ == '__main__':
-    get_roi_total()
+    # get_roi_total()
     # get_roi_single()
+    # test_scale_intensity()
+    iter_intensity()
