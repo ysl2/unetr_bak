@@ -11,21 +11,19 @@ import numpy as np
 import nibabel as nib
 
 
-def get_pairs(pathstr, img_pattern, label_patterns):
+def _get_pairs(pathstr, img_pattern, mask_patterns):
     """Get image-label pair from sepcific label_patterns and a single image_pattern.
 
     Args:
         pathstr (str): dataset path. e.g, '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211214/shidaoai/sichuan'
         img_pattern (str): e.g, '*CT*.gz'
-        label_patterns (Union[str]): label patterns. e.g, label_patterns=['* T*.gz', '*-T*.gz', '*T1*.gz']
+        label_patterns (list[str]): label patterns. e.g, label_patterns=['* T*.gz', '*-T*.gz', '*T1*.gz']
 
     Returns:
-        [type]: [description]
+        (image, label): yield
     """
     path = pathlib.Path(pathstr)
-    images = []
-    labels = []
-    for pattern in label_patterns:
+    for pattern in mask_patterns:
         for item in list(path.rglob(pattern)):
             if not item.exists():
                 continue
@@ -34,9 +32,7 @@ def get_pairs(pathstr, img_pattern, label_patterns):
             if not image:
                 continue
             image = image[0].as_posix()
-            images.append(image)
-            labels.append(label)
-    return images, labels
+            yield image, label
 
 
 def move_img_label(imgs, labels, img_folder, label_folder):
@@ -221,13 +217,29 @@ def get_roi(img_path, mask_path, save_root, save_folder_name='cropped', radius=N
     mask_path = pathlib.Path(mask_path)
     save_root = pathlib.Path(save_root)
 
-    img_relative = img_path.relative_to(save_root)
-    mask_relative = mask_path.relative_to(save_root)
+    try:
+        # Load from original dataset, and save to it's original format.
+        img_relative = img_path.relative_to(save_root)
+        mask_relative = mask_path.relative_to(save_root)
 
-    img_savename = pathlib.Path(save_root.as_posix() + os.sep + save_folder_name + os.sep + img_relative.as_posix())
-    mask_savename = pathlib.Path(save_root.as_posix() + os.sep + save_folder_name + os.sep + mask_relative.as_posix())
+        img_savename = pathlib.Path(save_root.as_posix() + os.sep + save_folder_name + os.sep + img_relative.as_posix())
+        mask_savename = pathlib.Path(save_root.as_posix() + os.sep + save_folder_name + os.sep + mask_relative.as_posix())
 
-    print(f'{img_relative} | {mask_relative}')
+        print(f'{img_relative} | {mask_relative}')
+    except:
+        # Load from 3D-Trans prediction, and save to 2D-UNet format.
+        img_save_header = save_root.as_posix() + os.sep + save_folder_name + os.sep + 'img'
+        mask_save_header = save_root.as_posix() + os.sep + save_folder_name + os.sep + 'mask'
+
+        img_number = img_path.name.split('_')[0]
+        mask_number = mask_path.name.split('_')[0]
+
+        img_savename = img_save_header + os.sep + img_number + '.nii.gz'
+        mask_savename = mask_save_header + os.sep + mask_number + '.nii.gz'
+        img_savename = pathlib.Path(img_savename)
+        mask_savename = pathlib.Path(mask_savename)
+
+        print(f'{img_path} | {mask_path}')
 
     # Load img and mask.
     img = nib.load(img_path.as_posix())
@@ -354,11 +366,8 @@ def scale_intensity(img_path, save_root, a_min=0, a_max=1500, b_min=0, b_max=1, 
     img_shape = img_array.shape
 
 
-    # Image intensity limitation.
-    img_array[img_array > a_max] = 0
-    # Image intensity normalization.
-    img_array = (img_array - a_min) / (a_max - a_min)
-    img_array = img_array * (b_max - b_min) + b_min
+    # Image intensity limitation and normalization.
+    img_roi_array = _scale_intensity(img_roi_array)
 
     # Save image.
     img_savefolder = img_savename.parent
@@ -377,3 +386,16 @@ def peek_image_intensity(img_path):
     img_path = pathlib.Path(img_path)
     img = nib.load(img_path.as_posix())
     return img.header.get_zooms()
+
+
+def check_pixel(data_path, data_path_pattern='**/24/**/*_pred.nii.gz'):
+    missing = []
+    for item in pathlib.Path(data_path).rglob(data_path_pattern):
+        # image = sitk.ReadImage(item.as_posix(), imageIO="PNGImageIO")
+        image = sitk.ReadImage(item.as_posix())
+        image = sitk.ReadImage(item.as_posix())
+        image_array = sitk.GetArrayViewFromImage(image)
+        image_shape = image.GetSize()
+        if image_array.sum() <= 0:
+            missing.append(item.as_posix())
+    return missing
