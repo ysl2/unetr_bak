@@ -256,10 +256,12 @@ def copy_training_cropped_from_json():
                 element_name = element_number + '.nii.gz'
                 element = pathlib.Path(element_parent + os.sep + element_name)
                 union[k] = element
+            print(union[0])
+            print(union[1])
             j += 1
         # Copy contents.
-        img_target.write_bytes(img_location.read_bytes())
-        mask_target.write_bytes(mask_location.read_bytes())
+        union[0].write_bytes(img_location.read_bytes())
+        union[1].write_bytes(mask_location.read_bytes())
 
         print(f'{i}/{total}: {img_number}')
         i += 1
