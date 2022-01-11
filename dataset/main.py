@@ -6,7 +6,7 @@ import os
 import sys
 import nibabel as nib
 import copy
-
+import numpy as np
 
 database_linux = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/'
 database_windows = 'F:\\shidaoai'
@@ -14,54 +14,120 @@ database_windows = 'F:\\shidaoai'
 output_linux = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/unetr_output'
 
 
-def backup():
-    # dt.check_contrast('F:\\shidaoai')
-    # dt.json_generate('F:\\shidaoai\\sichuan', 'F:\\shidaoai\\beijing')
-
-    # dt.check_contrast('/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/')
-    # dt.json_generate('/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan', '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/beijing')
-
-    # target_files =  dt.get_targets(pathstr='/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/unetr_output', patterns=['**/99/**/*_pred.nii.gz'])
-    # target_length = len(target_files)
-    # target_files = json.dumps(target_files, indent=4)
-    # # pred predict image label
-    #
-    # print(target_files)
-    # print(target_length)
-    pass
+def test_json_generate():
+    train_val_path = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan'
+    test_path = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/beijing'
+    dt.json_generate(train_val_path, test_path, json_savepath='dataset/dataset.json', mask_patterns=['*T[_1 ]*.gz'])
+    _test_generate_convert_json_from_json()
 
 
-def get_roi_total():
+def _test_generate_convert_json_from_json():
+    json_path = 'dataset/dataset.json'
+    common_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223'
+    new_json_save_path = 'dataset/convert_dataset.json'
+    dt.generate_convert_json_from_json(common_root, json_path, new_json_save_path)
+
+
+def test_get_roi_total():
     save_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai'
 
-    file = open('dataset/dataset.json', 'r')
+    file = open('dataset/convert_dataset.json', 'r')
+    # file = open('dataset/dataset_test.json', 'r')
     dataset = json.load(file)
 
     tags = ['training', 'validation', 'test']
 
-    max_radius = -1
-    min_radius = 9999
-    with open('crop_log.txt', 'w') as f:
+    with open('logs/crop_log.txt', 'w') as f:
         for tag in tags:
+
+            max_radius = -1
+            max_radius_img = None
+
+            min_radius = 9999
+            min_radius_img = None
+
+            max_x_radius = -1
+            max_x_radius_img = None
+
+            min_x_radius = 9999
+            min_x_radius_img = None
+
+            max_y_radius = -1
+            max_y_radius_img = None
+
+            min_y_radius = 9999
+            min_y_radius_img = None
+
+            max_z_radius = -1
+            max_z_radius_img = None
+
+            min_z_radius = 9999
+            min_z_radius_img = None
+
             for i in range(len(dataset[tag])):
-                img_path = dataset[tag][i]['image']
-                mask_path = dataset[tag][i]['label']
-                return_value = dt.get_roi(
-                    img_path, mask_path, save_root, radius=63)
-                if return_value < 0:
-                    f.write(f'{return_value} | {img_path}\n')
-                    f.flush()
-                if return_value > max_radius:
-                    max_radius = return_value
-                    print(f'Current max radius: {max_radius}')
-                if 0 < return_value < min_radius:
-                    min_radius = return_value
-                    print(f'Current min radius: {min_radius}')
-        print(f'Total max radius: {max_radius}')
-        print(f'Total min radius: {min_radius}')
-        f.write(f'Total max radius: {max_radius}\n')
-        f.write(f'Total min radius: {min_radius}\n')
-        f.flush()
+                img_path = dataset[tag][i]['image'][5]
+                mask_path = dataset[tag][i]['label'][5]
+                img_savepath = dataset[tag][i]['image'][3]
+                mask_savepath = dataset[tag][i]['label'][3]
+                return_value = dt.get_roi(img_path, mask_path, img_savepath, mask_savepath)
+                if isinstance(return_value, np.int64) or isinstance(return_value, int):
+                    if return_value < 0:
+                        f.write(f'{return_value} | {img_path}\n')
+                        f.flush()
+                    if return_value > max_radius:
+                        max_radius = return_value
+                        max_radius_img = img_path
+                        print(f'{tag} | Current max radius: {max_radius}, in {max_radius_img}')
+                    if 0 < return_value < min_radius:
+                        min_radius = return_value
+                        min_radius_img = img_path
+                        print(f'{tag} | Current min radius: {min_radius}, in {min_radius_img}')
+                elif isinstance(return_value, tuple):
+                    if return_value[0] > max_x_radius:
+                        max_x_radius = return_value[0]
+                        max_x_radius_img = img_path
+                        print(f'{tag} | Current max x radius: {max_x_radius}, in {max_x_radius_img}')
+                    if return_value[0] < min_x_radius:
+                        min_x_radius = return_value[0]
+                        min_x_radius_img = img_path
+                        print(f'{tag} | Current min x radius: {min_x_radius}, in {min_x_radius_img}')
+                    if return_value[1] > max_y_radius:
+                        max_y_radius = return_value[1]
+                        max_y_radius_img = img_path
+                        print(f'{tag} | Current max y radius: {max_y_radius}, in {max_y_radius_img}')
+                    if return_value[1] < min_y_radius:
+                        min_y_radius = return_value[1]
+                        min_y_radius_img = img_path
+                        print(f'{tag} | Current min y radius: {min_y_radius}, in {min_y_radius_img}')
+                    if return_value[2] > max_z_radius:
+                        max_z_radius = return_value[2]
+                        max_z_radius_img = img_path
+                        print(f'{tag} | Current max z radius: {max_z_radius}, in {max_z_radius_img}')
+                    if return_value[2] < min_z_radius:
+                        min_z_radius = return_value[2]
+                        min_z_radius_img = img_path
+                        print(f'{tag} | Current min z radius: {min_z_radius}, in {min_z_radius_img}')
+
+            if isinstance(return_value, np.int64) or isinstance(return_value, int):
+                print(f'{tag} | Total max radius: {max_radius}, in {max_radius_img}')
+                print(f'{tag} | Total min radius: {min_radius}, in {min_radius_img}')
+                f.write(f'{tag} | Total max radius: {max_radius}, in {max_radius_img}\n')
+                f.write(f'{tag} | Total min radius: {min_radius}, in {min_radius_img}\n')
+                f.flush()
+            elif isinstance(return_value, tuple):
+                print(f'{tag} | Total max x radius: {max_x_radius}, in {max_x_radius_img}')
+                print(f'{tag} | Total min x radius: {min_x_radius}, in {min_x_radius_img}')
+                print(f'{tag} | Total max y radius: {max_y_radius}, in {max_y_radius_img}')
+                print(f'{tag} | Total min y radius: {min_y_radius}, in {min_y_radius_img}')
+                print(f'{tag} | Total max z radius: {max_z_radius}, in {max_z_radius_img}')
+                print(f'{tag} | Total min z radius: {min_z_radius}, in {min_z_radius_img}')
+                f.write(f'{tag} | Total max x radius: {max_x_radius}, in {max_x_radius_img}\n')
+                f.write(f'{tag} | Total min x radius: {min_x_radius}, in {min_x_radius_img}\n')
+                f.write(f'{tag} | Total max y radius: {max_y_radius}, in {max_y_radius_img}\n')
+                f.write(f'{tag} | Total min y radius: {min_y_radius}, in {min_y_radius_img}\n')
+                f.write(f'{tag} | Total max z radius: {max_z_radius}, in {max_z_radius_img}\n')
+                f.write(f'{tag} | Total min z radius: {min_z_radius}, in {min_z_radius_img}\n')
+                f.flush()
 
 
 def get_roi_single():
@@ -116,6 +182,36 @@ def iter_intensity():
                 return
 
 
+def test_check_zooms():
+    with open('dataset/convert_dataset.json', 'r') as f:
+        dataset = json.load(f)
+
+    max_x_zoom = -1
+    min_x_zoom = 9999
+    max_y_zoom = -1
+    min_y_zoom = 9999
+    max_z_zoom = -1
+    min_z_zoom = 9999
+
+    tags = ['training', 'validation', 'test']
+    i = 0
+    for tag in tags: # ['training', 'validation', 'test']
+        for item in dataset[tag]: # item: {'image': [], 'label': []}
+            img_path = item['image'][4]
+            zooms = dt.check_zooms(img_path)
+            i += 1
+            max_x_zoom = max(max_x_zoom, zooms[0])
+            min_x_zoom = min(min_x_zoom, zooms[0])
+            max_y_zoom = max(max_y_zoom, zooms[1])
+            min_y_zoom = min(min_y_zoom, zooms[1])
+            max_z_zoom = max(max_z_zoom, zooms[2])
+            min_z_zoom = min(min_z_zoom, zooms[2])
+    print(f'Max x zoom: {max_x_zoom}, min x zoom: {min_x_zoom}')
+    print(f'Max y zoom: {max_y_zoom}, min y zoom: {min_y_zoom}')
+    print(f'Max z zoom: {max_z_zoom}, min z zoom: {min_z_zoom}')
+    print(f'Total: {i}')
+
+
 def find_CT_prediction_pair_from_json_validation():
     predict_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/unetr_output/24'
     f = open('dataset/dataset.json')
@@ -124,7 +220,7 @@ def find_CT_prediction_pair_from_json_validation():
     save_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai'
 
     counter = 0
-    with open('crop_log.txt', 'w') as f:
+    with open('logs/crop_log.txt', 'w') as f:
         for item in validation:
             img_path = pathlib.Path(item['image'])
             img_name = img_path.name
@@ -135,7 +231,7 @@ def find_CT_prediction_pair_from_json_validation():
             return_value = dt.get_roi(
                 img_path, pred_str, save_root, save_folder_name='croppped_img_mask_pred', radius=63)
             counter += 1
-            if return_value < 0:
+            if return_value and return_value < 0:
                 f.write(f'{return_value} | {pred_str}\n')
                 f.flush()
         print(f'Total processed img: {counter}.')
@@ -253,7 +349,7 @@ def copy_training_cropped_from_json():
                 element_number = element_name.split('.')[0]
                 element_number = element_number.split('_')[0]
                 element_number = element_number + '_' + str(j)
-                element_name = element_number + '.nii.gz'
+                element_name = element_number + '_MASK.nii.gz'
                 element = pathlib.Path(element_parent + os.sep + element_name)
                 union[k] = element
             print(union[0])
@@ -267,12 +363,21 @@ def copy_training_cropped_from_json():
         i += 1
 
 
+def test_json_move():
+    convert_json_path = 'dataset/convert_dataset.json'
+    dt.json_move(convert_json_path=convert_json_path, tags=['training', 'validation', 'test'], input_index=6, output_index=4, mode='cut', log_path='logs/json_move.txt')
+
+
 if __name__ == '__main__':
-    # get_roi_total()
-    # get_roi_single()
+    test_json_generate()
+    # test_get_roi_total()
+    # test_get_roi_single()
     # test_scale_intensity()
     # iter_intensity()
     # test_move_data()
     # find_CT_prediction_pair_from_json_validation()
     # test_check_pixel()
-    copy_training_cropped_from_json()
+    # copy_training_cropped_from_json()
+    # test_generate_convert_json_from_json()
+    # test_json_move()
+    # test_check_zooms()

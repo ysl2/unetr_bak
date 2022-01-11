@@ -4,11 +4,12 @@
 import pathlib
 import os
 import json
-from random import sample
+import random
 import sys
 import SimpleITK as sitk
 import numpy as np
 import nibabel as nib
+import shutil
 
 
 def _get_pairs(pathstr, img_pattern, mask_patterns):
@@ -84,7 +85,7 @@ def merge_iterate(pathstr1, pathstr2):
     return sorted_subitem1, sorted_subitem2
 
 
-def json_generate(train_val_path, test_path, mask_patterns=['* T*.gz', '*-T*.gz', '*T1*.gz'], img_pattern='*CT*.gz'):
+def json_generate(train_val_path, test_path, mask_patterns=['*T[_1 ]*.gz'], img_pattern='*CT*.gz', json_savepath='dataset.json'):
     """生成数据集的json文件
 
     Args:
@@ -100,7 +101,8 @@ def json_generate(train_val_path, test_path, mask_patterns=['* T*.gz', '*-T*.gz'
         data.extend({'image': list(item.parent.rglob(img_pattern))[0].as_posix(
         ), 'label': item.as_posix()} for item in list(path.rglob(pattern)) if 'LACKT' not in item.name)
 
-    data_train = sample(data, int(len(data) * 0.8))
+    random.seed(0)
+    data_train = random.sample(data, int(len(data) * 0.8))
     data_val = [item for item in data if item not in data_train]
 
     json_dict = {'training': data_train, 'validation': data_val}
@@ -111,26 +113,27 @@ def json_generate(train_val_path, test_path, mask_patterns=['* T*.gz', '*-T*.gz'
 
     json_dict['test'] = []
 
-    for pattern in patterns:
+    for pattern in mask_patterns:
         json_dict['test'].extend({'image': list(item.parent.rglob(img_pattern))[0].as_posix(), 'label': item.as_posix()}
                                  for item in list(path_test.rglob(pattern)) if 'LACKT' not in item.name)
 
     json_file = json.dumps(json_dict, indent=4, sort_keys=False)
+
 
     # 查看训练集、验证集、测试集的数据量，并保存json文件。
 
     print(len(json_dict['training']), len(
         json_dict['validation']), len(json_dict['test']))
 
-    with open('dataset.json', 'w') as f:
+    with open(json_savepath, 'w') as f:
         f.write(json_file)
 
 
-def check_contrast(datastr):
+def check_contrast(datastr, log_path='check_contrast.txt'):
     datapath = pathlib.Path(datastr)
     imgs = datapath.rglob(pattern='*CT*')
 
-    with open('check_contrast.txt', 'w') as f:
+    with open(log_path, 'w') as f:
         for img in imgs:
             ct = sitk.ReadImage(img.as_posix())
             ct_array = sitk.GetArrayFromImage(ct)
@@ -139,7 +142,7 @@ def check_contrast(datastr):
             f.flush()
 
 
-def get_targets(pathstr, patterns):
+def _get_targets(pathstr, patterns, log_path='no_label.txt'):
     """
     Find some target files in a specific folder path.
     Args:
@@ -198,7 +201,7 @@ def no_label():
 
     # no_label = [item['image_meta_dict']['filename_or_obj'][0] for item in orig_loader if item['label'].sum() == 0 ]
 
-    with open(pathlib.Path('no_label.txt').as_posix(), 'w') as f:
+    with open(pathlib.Path(log_path).as_posix(), 'w') as f:
         for item in orig_loader:
             if item['label'].sum() == 0:
                 print(item['label_meta_dict']['filename_or_obj'][0])
@@ -210,50 +213,34 @@ def no_label():
     #         f.write(item + '\n')
 
 
-
-def get_roi(img_path, mask_path, save_root, save_folder_name='cropped', radius=None):
+def get_roi(img_path, mask_path, img_savepath, mask_savepath, radius=None):
     # Get save path.
     img_path = pathlib.Path(img_path)
     mask_path = pathlib.Path(mask_path)
-    save_root = pathlib.Path(save_root)
+    img_savepath = pathlib.Path(img_savepath)
+    mask_savepath = pathlib.Path(mask_savepath)
 
-    try:
-        # Load from original dataset, and save to it's original format.
-        img_relative = img_path.relative_to(save_root)
-        mask_relative = mask_path.relative_to(save_root)
-
-        img_savename = pathlib.Path(save_root.as_posix() + os.sep + save_folder_name + os.sep + img_relative.as_posix())
-        mask_savename = pathlib.Path(save_root.as_posix() + os.sep + save_folder_name + os.sep + mask_relative.as_posix())
-
-        print(f'{img_relative} | {mask_relative}')
-    except:
-        # Load from 3D-Trans prediction, and save to 2D-UNet format.
-        img_save_header = save_root.as_posix() + os.sep + save_folder_name + os.sep + 'img'
-        mask_save_header = save_root.as_posix() + os.sep + save_folder_name + os.sep + 'mask'
-
-        img_number = img_path.name.split('_')[0]
-        mask_number = mask_path.name.split('_')[0]
-
-        img_savename = img_save_header + os.sep + img_number + '.nii.gz'
-        mask_savename = mask_save_header + os.sep + mask_number + '.nii.gz'
-        img_savename = pathlib.Path(img_savename)
-        mask_savename = pathlib.Path(mask_savename)
-
-        print(f'{img_path} | {mask_path}')
+    print(f'{img_path} | {mask_path}')
 
     # Load img and mask.
-    img = nib.load(img_path.as_posix())
-    img_array = img.get_fdata()
-    img_shape = img_array.shape
+    have_img_flag = True
+    try:
+        img = nib.load(img_path.as_posix())
+        img_array = img.get_fdata()
+        img_shape = img_array.shape
+    except:
+        have_img_flag = False
+
 
     mask = nib.load(mask_path.as_posix())
     mask_array = mask.get_fdata()
     mask_shape = mask_array.shape
 
-    for i in range(len(img_shape)):
-        if img_shape[i] != mask_shape[i]:
-            # Img does not match with mask. They are in different shape.
-            return -1
+    if have_img_flag:
+        for i in range(len(img_shape)):
+            if img_shape[i] != mask_shape[i]:
+                # Img does not match with mask. They are in different shape.
+                return -1
 
     nozero = np.nonzero(mask_array)
 
@@ -284,26 +271,39 @@ def get_roi(img_path, mask_path, save_root, save_folder_name='cropped', radius=N
     y_center = y_min + y_radius
     z_center = z_min + z_radius
 
+    # ! <<< Different cutting method.
+    # Smallest roi
+    # x_roi_min_orig = x_center - (x_radius + 1)
+    # x_roi_max_orig = x_center + (x_radius + 1)
+    # y_roi_min_orig = y_center - (y_radius + 1)
+    # y_roi_max_orig = y_center + (y_radius + 1)
+    # z_roi_min_orig = z_center - (z_radius + 1)
+    # z_roi_max_orig = z_center + (z_radius + 1)
+
+    # Common roi
     x_roi_min_orig = x_center - (max_radius + 1)
     x_roi_max_orig = x_center + (max_radius + 1)
     y_roi_min_orig = y_center - (max_radius + 1)
     y_roi_max_orig = y_center + (max_radius + 1)
     z_roi_min_orig = z_center - (max_radius + 1)
     z_roi_max_orig = z_center + (max_radius + 1)
+    # ! >>>
 
     # Note: If the voxal concatinates with the image boundary, there will be a bug that the cropped array will not be a cube. It need to be fixed in the future.
     x_roi_min_norm = max(x_roi_min_orig, 0)
-    x_roi_max_norm = min(x_roi_max_orig, img_shape[0])
+    x_roi_max_norm = min(x_roi_max_orig, mask_shape[0])
     y_roi_min_norm = max(y_roi_min_orig, 0)
-    y_roi_max_norm = min(y_roi_max_orig, img_shape[1])
+    y_roi_max_norm = min(y_roi_max_orig, mask_shape[1])
     z_roi_min_norm = max(z_roi_min_orig, 0)
-    z_roi_max_norm = min(z_roi_max_orig, img_shape[2])
+    z_roi_max_norm = min(z_roi_max_orig, mask_shape[2])
 
     mask_roi_array = mask_array[x_roi_min_norm:x_roi_max_norm, y_roi_min_norm:y_roi_max_norm, z_roi_min_norm:z_roi_max_norm]
-    img_roi_array = img_array[x_roi_min_norm:x_roi_max_norm, y_roi_min_norm:y_roi_max_norm, z_roi_min_norm:z_roi_max_norm]
 
-    # Image intensity limitation and normalization.
-    img_roi_array = _scale_intensity(img_roi_array)
+    if have_img_flag:
+        img_roi_array = img_array[x_roi_min_norm:x_roi_max_norm, y_roi_min_norm:y_roi_max_norm, z_roi_min_norm:z_roi_max_norm]
+
+        # Image intensity limitation and normalization.
+        img_roi_array = _scale_intensity(img_roi_array)
 
     # print(img.shape)
     # print(nozero)
@@ -320,25 +320,29 @@ def get_roi(img_path, mask_path, save_root, save_folder_name='cropped', radius=N
     #     # The cropped area is not a cube. Error generated, return.
     #     return -2
 
-    img_savefolder = img_savename.parent
-    mask_savefolder = mask_savename.parent
+    # ! <<< Save img and mask.
+    # img_savefolder = img_savepath.parent
+    # mask_savefolder = mask_savepath.parent
 
-    if not img_savefolder.exists():
-        img_savefolder.mkdir(parents=True, exist_ok=True)
-    if not mask_savefolder.exists():
-        mask_savefolder.mkdir(parents=True, exist_ok=True)
+    # if have_img_flag and not img_savefolder.exists():
+    #     img_savefolder.mkdir(parents=True, exist_ok=True)
+    # if not mask_savefolder.exists():
+    #     mask_savefolder.mkdir(parents=True, exist_ok=True)
 
-    img_out = nib.Nifti1Image(img_roi_array, affine=np.eye(4))
-    # Get image header for fix resolution.
-    img_out.header.set_zooms(img.header.get_zooms())
-    img_out.to_filename(img_savename.as_posix())
+    # if have_img_flag:
+    #     img_out = nib.Nifti1Image(img_roi_array, affine=np.eye(4))
+    #     # Get image header for fix resolution.
+    #     img_out.header.set_zooms(img.header.get_zooms())
+    #     img_out.to_filename(img_savepath.as_posix())
 
-    mask_out = nib.Nifti1Image(mask_roi_array, affine=np.eye(4))
-    # Get mask header for fix resolution.
-    mask_out.header.set_zooms(mask.header.get_zooms())
-    mask_out.to_filename(mask_savename.as_posix())
+    # mask_out = nib.Nifti1Image(mask_roi_array, affine=np.eye(4))
+    # # Get mask header for fix resolution.
+    # mask_out.header.set_zooms(mask.header.get_zooms())
+    # mask_out.to_filename(mask_savepath.as_posix())
+    # ! >>>
 
-    return max_radius
+    # return max_radius
+    return x_radius, y_radius, z_radius
 
 
 def _scale_intensity(img_array, a_min=0, a_max=1500, b_min=0, b_max=1):
@@ -351,36 +355,8 @@ def _scale_intensity(img_array, a_min=0, a_max=1500, b_min=0, b_max=1):
 
     return img_array
 
-def scale_intensity(img_path, save_root, a_min=0, a_max=1500, b_min=0, b_max=1, save_folder_name='scale_intensity_single'):
-    img_path = pathlib.Path(img_path)
-    save_root = pathlib.Path(save_root)
 
-    # Get image save path.
-    img_relative = img_path.relative_to(save_root)
-    img_savename = pathlib.Path(save_root.as_posix() + os.sep + save_folder_name + os.sep + img_relative.as_posix())
-    print(f'{img_relative}')
-
-    # Load image.
-    img = nib.load(img_path.as_posix())
-    img_array = img.get_fdata()
-    img_shape = img_array.shape
-
-
-    # Image intensity limitation and normalization.
-    img_roi_array = _scale_intensity(img_roi_array)
-
-    # Save image.
-    img_savefolder = img_savename.parent
-    if not img_savefolder.exists():
-        img_savefolder.mkdir(parents=True, exist_ok=True)
-
-    img_out = nib.Nifti1Image(img_array, affine=np.eye(4))
-    # Get image header for fix resolution.
-    img_out.header.set_zooms(img.header.get_zooms())
-    img_out.to_filename(img_savename.as_posix())
-
-
-def peek_image_intensity(img_path):
+def check_zooms(img_path):
     print(img_path)
 
     img_path = pathlib.Path(img_path)
@@ -399,3 +375,120 @@ def check_pixel(data_path, data_path_pattern='**/24/**/*_pred.nii.gz'):
         if image_array.sum() <= 0:
             missing.append(item.as_posix())
     return missing
+
+
+def generate_convert_json_from_json(common_root, json_path, new_json_save_path):
+    """从`dataset.json`中生成每种情况下每个文件的名字
+    Args:
+        common_root: common root path. e.g, /home/yusongli/_dataset/_IIPL/_Shuaiwang/20211223
+        json_path: dataset.json path. e.g, 'dataset/dataset.json'
+        new_json_save_path: new dataset.json path. e.g, 'dataset/convert_dataset.json'
+    """
+    common_root = pathlib.Path(common_root)
+    dataset = json.load(open(json_path, 'r'))
+    # print(len(dataset['training']), len(dataset['validation']), len(dataset['test']))
+    tags = ['training', 'validation', 'test']
+    for tag in tags:
+        for item in dataset[tag]:
+            
+            # Save current paths.
+            img = pathlib.Path(item['image'])
+            mask = pathlib.Path(item['label'])
+
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/sichuan/liutong/306865/306865_CT.nii.gz'
+            img_0 = img.as_posix()
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/sichuan/liutong/306865/306865_GTV-T_MASK.nii.gz'
+            mask_0 = mask.as_posix()
+
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/cropped_shidoai/sichuan/liutong/306865/306865_CT.nii.gz"
+            img_1 = pathlib.Path(common_root.as_posix() + os.sep + 'cropped_shidaoai' + os.sep + img.parents[2].name + os.sep + img.parents[1].name + os.sep + img.parents[0].name + os.sep + img.name).as_posix()
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/cropped_shidoai/sichuan/liutong/306865/306865_GTV-T_MASK.nii.gz"
+            mask_1 = pathlib.Path(common_root.as_posix() + os.sep + 'cropped_shidaoai' + os.sep + mask.parents[2].name + os.sep + mask.parents[1].name + os.sep + mask.parents[0].name + os.sep + mask.name).as_posix()
+
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/img_mask/img/sichuan_liutong_306865_CT.nii.gz'
+            img_2 = pathlib.Path(common_root.as_posix() + os.sep + 'img_mask' + os.sep + 'img' + os.sep + img.parents[2].name + '_' + img.parents[1].name + '_' + img.parents[0].name + '.nii.gz').as_posix()
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/img_mask/mask/sichuan_liutong_306865_CT.nii.gz'
+            mask_2 = pathlib.Path(common_root.as_posix() + os.sep + 'img_mask' + os.sep + 'mask' + os.sep + img.parents[2].name + '_' + img.parents[1].name + '_' + img.parents[0].name + '.nii.gz').as_posix()
+
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/cropped_img_mask/img/sichuan_liutong_306865_CT.nii.gz'
+            img_3 = pathlib.Path(common_root.as_posix() + os.sep + 'cropped_img_mask' + os.sep + 'img' + os.sep + img.parents[2].name + '_' + img.parents[1].name + '_' + img.parents[0].name + '.nii.gz').as_posix()
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/cropped_img_mask/mask/sichuan_liutong_306865_CT.nii.gz'
+            mask_3 = pathlib.Path(common_root.as_posix() + os.sep + 'cropped_img_mask' + os.sep + 'mask' + os.sep + img.parents[2].name + '_' + img.parents[1].name + '_' + img.parents[0].name + '.nii.gz').as_posix()
+            
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/spacial_input/img/sichuan_liutong_306865_CT.nii.gz'
+            img_4 = pathlib.Path(common_root.as_posix() + os.sep + 'spacial_input' + os.sep + 'img' + os.sep + img.parents[2].name + '_' + img.parents[1].name + '_' + img.parents[0].name + '.nii.gz').as_posix()
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/spacial_input/mask/sichuan_liutong_306865_CT.nii.gz'
+            mask_4 = pathlib.Path(common_root.as_posix() + os.sep + 'spacial_input' + os.sep + 'mask' + os.sep + img.parents[2].name + '_' + img.parents[1].name + '_' + img.parents[0].name + '.nii.gz').as_posix()
+
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/spacial_output/img/sichuan_liutong_306865_CT.nii.gz'
+            img_5 = pathlib.Path(common_root.as_posix() + os.sep + 'spacial_output' + os.sep + 'img' + os.sep + img.parents[2].name + '_' + img.parents[1].name + '_' + img.parents[0].name + '.nii.gz').as_posix()
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/spacial_output/mask/sichuan_liutong_306865_CT.nii.gz'
+            mask_5 = pathlib.Path(common_root.as_posix() + os.sep + 'spacial_output' + os.sep + 'mask' + os.sep + img.parents[2].name + '_' + img.parents[1].name + '_' + img.parents[0].name + '.nii.gz').as_posix()
+
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/temp_trash_for_test/img/sichuan_liutong_306865_CT.nii.gz'
+            img_6 = pathlib.Path(common_root.as_posix() + os.sep + 'temp_trash' + os.sep + 'img' + os.sep + img.parents[2].name + '_' + img.parents[1].name + '_' + img.parents[0].name + '.nii.gz').as_posix()
+            # '/home/yusongli/dataset/IIPL/Shuaiwang/20211223/shidaoai/spacial_output/mask/sichuan_liutong_306865_CT.nii.gz'
+            mask_6 = pathlib.Path(common_root.as_posix() + os.sep + 'temp_trash' + os.sep + 'mask' + os.sep + img.parents[2].name + '_' + img.parents[1].name + '_' + img.parents[0].name + '.nii.gz').as_posix()
+
+            item['image'] = [img_0, img_1, img_2, img_3, img_4, img_5, img_6]
+            item['label'] = [mask_0, mask_1, mask_2, mask_3, mask_4, mask_5, mask_6]
+
+    dataset = json.dumps(dataset, indent=4)
+    with open(new_json_save_path, 'w') as f:
+        f.write(dataset)
+
+
+def json_move(convert_json_path, tags, input_index, output_index, mode='copy', log_path='json_move.txt'):
+    """Move into and out of the folder for spacial resolution shell script working
+    Args:
+        convert_json_path (json file): e.g, `dataset/convert_dataset.json`
+        tags (list): can be ['training', 'validation', 'test']
+        input_index (int): which one in the json is the input path.
+        output_index (int): which one in the json is the output path.
+        mode ('copy' or 'cut'): 'copy' for copy and 'cut' for cut and paste. 
+    """
+    with open(convert_json_path, 'r') as j:
+        dataset = json.load(j)
+
+        orig_collector = []
+        target_collector = []
+
+        with open(log_path, 'w') as f:
+            for tag in tags: # ['training', 'validation', 'test']
+                for item in dataset[tag]: # item: {'image': [], 'label': []}
+                    for i in item.keys(): # e.g., 'image', 'label'
+                        orig = item[i][input_index]
+                        target = item[i][output_index]
+                        orig = pathlib.Path(orig)
+                        target = pathlib.Path(target)
+
+                        if not orig.exists():
+                            orig_collector.append(orig)
+                            print(f'Not exist: {orig}')
+                            f.write(f'Orig not exist: {orig.as_posix()}\n')
+                            f.flush()
+                            continue
+
+                        if target.exists():
+                            target_collector.append(target)
+                            print(f'Target already exist: {target}')
+                            f.write(f'Target already exist: {target.as_posix()}\n')
+                            f.flush()
+                            continue
+
+                        target = pathlib.Path(target)
+
+                        target_folder = target.parents[0]
+                        if not target_folder.exists():
+                            target_folder.mkdir(parents=True, exist_ok=True)
+
+                        if mode == 'copy':
+                            shutil.copy(orig, target)
+                        elif mode == 'cut':
+                            shutil.move(orig, target)
+
+            print(f'{len(orig_collector)} files not exist.')
+            f.write(f'{len(orig_collector)} files not exist.\n')
+            print(f'{len(target_collector)} files already exist.')
+            f.write(f'{len(target_collector)} files already exist.\n')
+            f.flush()
