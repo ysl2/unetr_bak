@@ -18,20 +18,20 @@ def test_json_generate():
     train_val_path = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/sichuan'
     test_path = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai/beijing'
     dt.json_generate(train_val_path, test_path, json_savepath='dataset/dataset.json', mask_patterns=['*T[_1 ]*.gz'])
-    _test_generate_convert_json_from_json()
-
-
-def _test_generate_convert_json_from_json():
     json_path = 'dataset/dataset.json'
-    common_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223'
-    new_json_save_path = 'dataset/convert_dataset.json'
-    dt.generate_convert_json_from_json(common_root, json_path, new_json_save_path)
+    dt.generate_convert_json_from_json(json_path)
+
+
+def test_generate_convert_json_from_json():
+    # json_path='dataset/dataset.json'
+    json_path='dataset/dataset_unetr_1332_334_276.json'
+    dt.generate_convert_json_from_json(json_path)
 
 
 def test_get_roi_total():
-    save_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai'
+    # save_root = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/shidaoai'
 
-    file = open('dataset/convert_dataset.json', 'r')
+    file = open('dataset/dataset_convert.json', 'r')
     # file = open('dataset/dataset_test.json', 'r')
     dataset = json.load(file)
 
@@ -183,7 +183,7 @@ def iter_intensity():
 
 
 def test_check_zooms():
-    with open('dataset/convert_dataset.json', 'r') as f:
+    with open('dataset/dataset_convert.json', 'r') as f:
         dataset = json.load(f)
 
     max_x_zoom = -1
@@ -364,12 +364,18 @@ def copy_training_cropped_from_json():
 
 
 def test_json_move():
-    convert_json_path = 'dataset/convert_dataset.json'
+    convert_json_path = 'dataset/dataset_convert.json'
     dt.json_move(convert_json_path=convert_json_path, tags=['training', 'validation', 'test'], input_index=6, output_index=4, mode='cut', log_path='logs/json_move.txt')
 
 
+def test_get_difference_between_json():
+    json_path1 = 'dataset/dataset.json'
+    json_path2 = 'dataset/dataset_unetr_1332_334_276.json'
+    log_path = 'logs/difference_json.txt'
+    dt.get_difference_between_json(json_path1, json_path2, log_path=log_path)
+
 if __name__ == '__main__':
-    test_json_generate()
+    # test_json_generate()
     # test_get_roi_total()
     # test_get_roi_single()
     # test_scale_intensity()
@@ -381,3 +387,4 @@ if __name__ == '__main__':
     # test_generate_convert_json_from_json()
     # test_json_move()
     # test_check_zooms()
+    test_get_difference_between_json()

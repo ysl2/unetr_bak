@@ -95,6 +95,7 @@ def json_generate(train_val_path, test_path, mask_patterns=['*T[_1 ]*.gz'], img_
     # 处理四川数据，随机8 2分，作为训练集和验证集。
     path = pathlib.Path(train_val_path)
 
+    # ! Note: A bug occured here. Due to multiple patterns, it will be traversed multiple times, resulting in possible duplicate elements.
     data = []
 
     for pattern in mask_patterns:
@@ -377,7 +378,7 @@ def check_pixel(data_path, data_path_pattern='**/24/**/*_pred.nii.gz'):
     return missing
 
 
-def generate_convert_json_from_json(common_root, json_path, new_json_save_path):
+def generate_convert_json_from_json(json_path, new_json_save_path=None, common_root='/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223'):
     """从`dataset.json`中生成每种情况下每个文件的名字
     Args:
         common_root: common root path. e.g, /home/yusongli/_dataset/_IIPL/_Shuaiwang/20211223
@@ -434,6 +435,12 @@ def generate_convert_json_from_json(common_root, json_path, new_json_save_path):
             item['label'] = [mask_0, mask_1, mask_2, mask_3, mask_4, mask_5, mask_6]
 
     dataset = json.dumps(dataset, indent=4)
+
+    if not new_json_save_path:
+        json_path = pathlib.Path(json_path)
+        json_folder = json_path.parent.as_posix()
+        new_json_save_path = pathlib.Path(json_folder + os.sep + json_path.name.split('.')[0] + '_convert.json').as_posix()
+
     with open(new_json_save_path, 'w') as f:
         f.write(dataset)
 
@@ -492,3 +499,56 @@ def json_move(convert_json_path, tags, input_index, output_index, mode='copy', l
             print(f'{len(target_collector)} files already exist.')
             f.write(f'{len(target_collector)} files already exist.\n')
             f.flush()
+
+
+def get_difference_between_json(json_path1, json_path2, log_path='difference_json.txt'):
+    json1 = json.load(open(json_path1, 'r'))
+    json2 = json.load(open(json_path2, 'r'))
+
+    imgs1 = []
+    masks1 = []
+    imgs2 = []
+    masks2 = []
+
+    diff_imgs = []
+    diff_masks = []
+
+    for tag in json1.keys():
+        for item in json1[tag]:
+            imgs1.append(item['image'])
+            masks1.append(item['label'])
+    print(f'{len(imgs1)} images in json1.')
+
+    for tag in json2.keys():
+        for item in json2[tag]:
+            if item['image'] not in imgs2:
+                imgs2.append(item['image'])
+                masks2.append(item['label'])
+            else:        
+                print(f'{item["image"]} already exist in json2.')
+    print(f'{len(imgs2)} images in json2.')
+
+    diff_imgs = [item for item in imgs1 if item not in imgs2]
+    diff_masks = [item for item in masks1 if item not in masks2]
+
+    print('<<<')
+    for item in diff_imgs:
+        print(item)
+    print('-' * 10)
+    for item in diff_masks:
+        print(item)
+    print('<<<')
+
+    imgs1, imgs2 = imgs2, imgs1
+    masks1, masks2 = masks2, masks1
+
+    diff_imgs = [item for item in imgs1 if item not in imgs2]
+    diff_masks = [item for item in masks1 if item not in masks2]
+
+    print('>>>')
+    for item in diff_imgs:
+        print(item)
+    print('-' * 10)
+    for item in diff_masks:
+        print(item)
+    print('>>>')
