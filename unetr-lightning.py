@@ -72,7 +72,7 @@ directory = os.environ.get("MONAI_DATA_DIRECTORY")
 # ! <<<
 # root_dir = tempfile.mkdtemp() if directory is None else directory
 # root_dir = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/unetr_debug/'
-root_dir = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/unetr_output/'
+root_dir = '/home/yusongli/_dataset/_IIPL/ShuaiWang/20211223/unetr_output_spacial_scale_intensity/'
 # ! >>>
 print(root_dir)
 
@@ -129,10 +129,7 @@ class Net(pytorch_lightning.LightningModule):
 
     def prepare_data(self):
         # prepare data
-        # data_dir ='/dataset/dataset0/'
-        data_dir = 'dataset/'
-        split_JSON = "dataset.json"
-        datasets = data_dir + split_JSON
+        datasets = 'dataset/dataset_unetr_1332_332_264_spacial_scale_intensity.json'
         datalist = load_decathlon_datalist(datasets, True, "training")
         val_files = load_decathlon_datalist(datasets, True, "validation")
 
